@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz - Copilot Chat & Vibe Coding (C#)</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0e1a;--surface:#111827;--surface-hi:#1a2236;--border:#243049;
+    --cyan:#22d3ee;--cyan-dim:rgba(34,211,238,.12);
+    --magenta:#e879f9;--magenta-dim:rgba(232,121,249,.10);
+    --green:#34d399;--green-dim:rgba(52,211,153,.12);
+    --red:#fb7185;--red-dim:rgba(251,113,133,.12);
+    --text:#e2e8f0;--text-dim:#94a3b8;--radius:12px;
+  }
+  html{font-size:16px;scroll-behavior:smooth}
+  body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;line-height:1.6}
+  .stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+  .stars span{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d,3s) ease-in-out infinite alternate;opacity:.25}
+  @keyframes twinkle{0%{opacity:.15;transform:scale(.8)}100%{opacity:.7;transform:scale(1.2)}}
+  .wrap{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+  header{text-align:center;margin-bottom:2.5rem}
+  header .badge{display:inline-block;font-family:'Space Mono',monospace;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);background:var(--cyan-dim);border:1px solid rgba(34,211,238,.25);padding:.35rem .9rem;border-radius:999px;margin-bottom:1rem}
+  header h1{font-family:'Space Mono',monospace;font-size:clamp(1.5rem,5vw,2.1rem);font-weight:700;line-height:1.25;background:linear-gradient(135deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  header p{color:var(--text-dim);margin-top:.6rem;font-size:.95rem}
+  .progress-wrap{display:flex;align-items:center;gap:.75rem;margin-bottom:2rem;font-family:'Space Mono',monospace;font-size:.8rem;color:var(--text-dim)}
+  .progress-bar{flex:1;height:6px;background:var(--surface-hi);border-radius:99px;overflow:hidden}
+  .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--magenta));border-radius:99px;transition:width .45s ease}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.5rem;margin-bottom:1.25rem;transition:opacity .3s,transform .3s}
+  .card.hidden{display:none}
+  .card .q-num{font-family:'Space Mono',monospace;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--magenta);margin-bottom:.6rem}
+  .card .q-text{font-size:1.05rem;font-weight:600;margin-bottom:1.25rem;line-height:1.45}
+  .options{display:flex;flex-direction:column;gap:.6rem}
+  .opt{position:relative;display:flex;align-items:flex-start;gap:.75rem;background:var(--surface-hi);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;cursor:pointer;transition:border-color .2s,background .2s,transform .15s;font-size:.93rem}
+  .opt:hover:not(.locked){border-color:var(--cyan);background:var(--cyan-dim);transform:translateX(3px)}
+  .opt .marker{flex-shrink:0;width:26px;height:26px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:.7rem;font-weight:700;color:var(--text-dim);transition:border-color .2s,background .2s,color .2s}
+  .opt:hover:not(.locked) .marker{border-color:var(--cyan);color:var(--cyan)}
+  .opt.correct{border-color:var(--green);background:var(--green-dim)}
+  .opt.correct .marker{border-color:var(--green);background:var(--green);color:var(--bg)}
+  .opt.wrong{border-color:var(--red);background:var(--red-dim)}
+  .opt.wrong .marker{border-color:var(--red);background:var(--red);color:var(--bg)}
+  .opt.locked{cursor:default;opacity:.65}
+  .opt.correct.locked{opacity:1}
+  .explanation{margin-top:1rem;padding:.85rem 1rem;border-left:3px solid var(--cyan);background:var(--cyan-dim);border-radius:0 8px 8px 0;font-size:.88rem;line-height:1.55;color:var(--text);display:none}
+  .explanation.show{display:block;animation:fadeIn .35s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .btn-next{display:none;margin:1.25rem auto 0;font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700;letter-spacing:.04em;color:var(--bg);background:linear-gradient(135deg,var(--cyan),var(--magenta));border:none;border-radius:999px;padding:.7rem 2rem;cursor:pointer;transition:transform .15s,box-shadow .2s}
+  .btn-next:hover{transform:scale(1.04);box-shadow:0 0 24px rgba(34,211,238,.3)}
+  .btn-next.show{display:block}
+  .results{text-align:center;padding:2.5rem 1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+  .results.hidden{display:none}
+  .results .score{font-family:'Space Mono',monospace;font-size:3.2rem;font-weight:700;background:linear-gradient(135deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .results .label{font-size:1rem;color:var(--text-dim);margin-top:.3rem}
+  .results .verdict{font-size:1.15rem;font-weight:600;margin-top:1.2rem}
+  .results .btn-restart{margin-top:1.5rem;font-family:'Space Mono',monospace;font-size:.82rem;font-weight:700;color:var(--cyan);background:transparent;border:1px solid var(--cyan);border-radius:999px;padding:.6rem 1.8rem;cursor:pointer;transition:background .2s,color .2s}
+  .results .btn-restart:hover{background:var(--cyan);color:var(--bg)}
+  @media(max-width:520px){.wrap{padding:1.5rem 1rem 3rem}.card{padding:1.25rem 1rem}header h1{font-size:1.4rem}}
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<div class="wrap">
+  <header>
+    <div class="badge">Powtorka z lekcji · C#</div>
+    <h1>Copilot Chat &amp; Vibe Coding</h1>
+    <p>10 pytań o budowaniu Space Shootera z AI</p>
+  </header>
+
+  <div class="progress-wrap">
+    <span id="prog-label">0 / 10</span>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+  </div>
+
+  <div id="quiz-container"></div>
+  <button class="btn-next" id="btn-next">Następne pytanie →</button>
+
+  <div class="results hidden" id="results">
+    <div class="score" id="res-score"></div>
+    <div class="label">poprawnych odpowiedzi</div>
+    <div class="verdict" id="res-verdict"></div>
+    <button class="btn-restart" onclick="restart()">Zagraj ponownie</button>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  {
+    q: "Czym różni się tryb Agent w Copilot Chat od zwykłego autouzupełniania?",
+    opts: [
+      "Agent działa wolniej, ale pisze lepszy kod",
+      "Agent sam tworzy i modyfikuje pliki w projekcie na podstawie opisu w języku naturalnym",
+      "Agent wymaga podania dokładnych nazw zmiennych, a autouzupełnianie nie",
+      "Nie ma żadnej różnicy - to to samo narzędzie"
+    ],
+    correct: 1,
+    explain: "Autouzupełnianie reaguje na kod, który piszemy i dopisuje fragmenty. Tryb Agent to pełna rozmowa - opisujemy co chcemy, a Copilot samodzielnie tworzy pliki, pisze kod i modyfikuje istniejące pliki w projekcie."
+  },
+  {
+    q: "Jaki jest pierwszy krok w każdym cyklu vibe codingu, ZANIM wpiszemy prompt?",
+    opts: [
+      "Uruchomienie projektu komendą dotnet run",
+      "Zaplanowanie promptu - zastanowienie się, jakie szczegóły muszą się w nim znaleźć",
+      "Wklejenie kodu z poprzedniego kroku",
+      "Przełączenie Copilota na tryb Edit"
+    ],
+    correct: 1,
+    explain: "Zanim napiszemy prompt, planujemy: co dokładnie chcemy osiągnąć, jakie szczegóły są istotne (rozmiary, kolory, zachowania, ograniczenia). Im precyzyjniej zaplanujemy, tym lepszy będzie wygenerowany kod."
+  },
+  {
+    q: "Dlaczego budujemy grę element po elemencie zamiast generować ją jednym promptem?",
+    opts: [
+      "Bo Copilot Chat nie potrafi wygenerować dużego programu",
+      "Bo tak wymagają zasady lekcji i nic więcej",
+      "Podejście krok po kroku daje lepszą kontrolę, pozwala testować każdy element i rozumieć, co AI wygenerowało",
+      "Bo jeden prompt byłby za drogi"
+    ],
+    correct: 2,
+    explain: "Budowanie krok po kroku pozwala kontrolować każdy element z osobna. Po każdym kroku testujemy, poprawiamy i analizujemy kod z AI. Wiemy co robi każdy fragment, a w razie błędu łatwo go zlokalizować."
+  },
+  {
+    q: "Co to jest Fix with Copilot i kiedy go używamy?",
+    opts: [
+      "To osobna aplikacja do naprawiania błędów w kodzie",
+      "To opcja dostępna po kliknięciu żarówki przy czerwonej falce - AI automatycznie naprawia błąd kompilacji",
+      "To komenda terminala, którą wpisujemy po dotnet run",
+      "To tryb Copilota, który wyłącza autouzupełnianie"
+    ],
+    correct: 1,
+    explain: "Gdy w edytorze pojawi się czerwona falka (błąd kompilacji), klikamy żarówkę i wybieramy Fix with Copilot. AI analizuje błąd i proponuje naprawę. To szybki sposób na rozwiązanie problemów bez konieczności rozumienia komunikatu kompilatora."
+  },
+  {
+    q: "Do czego służy Inline Chat (Ctrl+I)?",
+    opts: [
+      "Do otwierania nowego okna czatu",
+      "Do zaznaczenia fragmentu kodu i opisania drobnej zmiany bez przełączania się do panelu czatu",
+      "Do automatycznego formatowania kodu",
+      "Do wysyłania kodu na GitHuba"
+    ],
+    correct: 1,
+    explain: "Inline Chat to skrót do szybkich, celowanych zmian. Zaznaczamy fragment kodu, naciskamy Ctrl+I i opisujemy poprawkę - np. \"zmień kolor na zielony\" albo \"zwiększ prędkość do 200\". Szybsze niż opisywanie kontekstu w głównym panelu czatu."
+  },
+  {
+    q: "Po co od samego początku prosimy Copilot Chat o strukturę opartą na klasach?",
+    opts: [
+      "Bez klas Raylib w ogóle nie działa",
+      "Klasy porządkują kod - każda odpowiada za jeden element gry, więc łatwiej dodawać nowe rzeczy bez psucia reszty",
+      "Klasy sprawiają, że program działa szybciej",
+      "Klasy są wymagane przez tryb Agent, inaczej nie wygeneruje kodu"
+    ],
+    correct: 1,
+    explain: "Klasy takie jak Player, Enemy, Bullet i Game dzielą kod na logiczne części. Bez nich Copilot wygeneruje proceduralny kod, który szybko zamieni się w bałagan trudny do rozbudowy. Klasy to jak przegródki w przyborniku."
+  },
+  {
+    q: "Co powinniśmy zrobić, gdy dotnet run wyświetla błąd w terminalu?",
+    opts: [
+      "Zamknąć VS Code i otworzyć ponownie",
+      "Zignorować błąd i pisać dalej",
+      "Kliknąć iskierkę Copilota obok komunikatu błędu - AI wyjaśni co poszło nie tak",
+      "Usunąć cały projekt i zacząć od nowa"
+    ],
+    correct: 2,
+    explain: "W terminalu VS Code obok komunikatu błędu pojawia się iskierka Copilota. Klik i AI tłumaczy co poszło nie tak i jak to naprawić. To uzupełnia cykl vibe codingu: prompt → Apply → uruchom → błąd → wyjaśnij → popraw."
+  },
+  {
+    q: "Dlaczego usuwamy pociski i wrogów, którzy wylecieli poza ekran gry?",
+    opts: [
+      "Żeby nie kolidowały z innymi obiektami poza ekranem",
+      "Żeby nie zajmowały pamięci - bez usuwania listy rosną bez końca i gra zwalnia",
+      "Pociski poza ekranem powodują błąd Raylib",
+      "To wymóg systemu operacyjnego"
+    ],
+    correct: 1,
+    explain: "Każdy pocisk i wróg to obiekt w pamięci. Gdybyśmy ich nie usuwali po opuszczeniu ekranu, listy rosłyby bez końca. Po pewnym czasie gra zacząłaby zauważalnie zwalniać."
+  },
+  {
+    q: "Co robimy po tym, jak Copilot wygeneruje kod i zaakceptujemy zmiany?",
+    opts: [
+      "Od razu piszemy kolejny prompt",
+      "Uruchamiamy grę (dotnet run), testujemy, a potem prosimy Copilot Chat o wyjaśnienie kodu",
+      "Kopiujemy kod do osobnego pliku na wszelki wypadek",
+      "Wysyłamy kod do trenera do sprawdzenia"
+    ],
+    correct: 1,
+    explain: "Po zaakceptowaniu zmian zawsze testujemy (dotnet run), sprawdzamy czy działa jak chcieliśmy, poprawiamy jeśli trzeba, a potem prosimy Copilot Chat o wyjaśnienie. Rozumienie wygenerowanego kodu to kluczowy nawyk vibe codingu."
+  },
+  {
+    q: "Dlaczego na tej lekcji celowo nie dajemy AI żadnych wstępnych instrukcji ani startera?",
+    opts: [
+      "Bo nie mamy czasu na ich przygotowanie",
+      "Bo Copilot nie obsługuje plików konfiguracyjnych",
+      "Żeby uczniowie sami uczyli się precyzyjnie opisywać, czego oczekują - to buduje nawyk świadomego promptowania",
+      "Bo starter spowalnia generowanie kodu"
+    ],
+    correct: 2,
+    explain: "Gdyby AI miało wstępne instrukcje, cicho naprawiałoby niedokładne prompty. Uczeń nigdy nie przeżyłby kontrastu między ogólnym a precyzyjnym opisem. Brak instrukcji uczy, że jakość promptu bezpośrednio wpływa na jakość kodu."
+  }
+];
+
+let current = 0, score = 0, answered = false;
+
+function init() {
+  const sf = document.getElementById('stars');
+  sf.innerHTML = '';
+  for (let i = 0; i < 80; i++) {
+    const s = document.createElement('span');
+    const size = Math.random() * 2.5 + 1;
+    s.style.cssText = `width:${size}px;height:${size}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${2+Math.random()*4}s;animation-delay:${Math.random()*3}s`;
+    sf.appendChild(s);
+  }
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const c = document.getElementById('quiz-container');
+  const d = DATA[current];
+  const letters = ['A','B','C','D'];
+  c.innerHTML = `
+    <div class="card" id="qcard">
+      <div class="q-num">Pytanie ${current+1} z ${DATA.length}</div>
+      <div class="q-text">${d.q}</div>
+      <div class="options">
+        ${d.opts.map((o,i) => `
+          <div class="opt" data-idx="${i}" onclick="pick(this,${i})">
+            <div class="marker">${letters[i]}</div>
+            <div>${o}</div>
+          </div>`).join('')}
+      </div>
+      <div class="explanation" id="expl">${d.explain}</div>
+    </div>`;
+  answered = false;
+  document.getElementById('btn-next').classList.remove('show');
+  updateProgress();
+}
+
+function pick(el, idx) {
+  if (answered) return;
+  answered = true;
+  const correct = DATA[current].correct;
+  const opts = document.querySelectorAll('.opt');
+  opts.forEach(o => o.classList.add('locked'));
+  if (idx === correct) { el.classList.add('correct'); score++; }
+  else { el.classList.add('wrong'); opts[correct].classList.add('correct'); }
+  document.getElementById('expl').classList.add('show');
+  const btn = document.getElementById('btn-next');
+  btn.textContent = current < DATA.length - 1 ? 'Następne pytanie →' : 'Zobacz wynik →';
+  btn.classList.add('show');
+  updateProgress();
+}
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  current++;
+  if (current < DATA.length) renderQuestion();
+  else showResults();
+});
+
+function updateProgress() {
+  const done = answered ? current + 1 : current;
+  document.getElementById('prog-label').textContent = `${done} / ${DATA.length}`;
+  document.getElementById('prog-fill').style.width = `${(done/DATA.length)*100}%`;
+}
+
+function showResults() {
+  document.getElementById('quiz-container').innerHTML = '';
+  document.getElementById('btn-next').classList.remove('show');
+  document.getElementById('prog-fill').style.width = '100%';
+  document.getElementById('prog-label').textContent = `${DATA.length} / ${DATA.length}`;
+  const r = document.getElementById('results');
+  r.classList.remove('hidden');
+  document.getElementById('res-score').textContent = `${score} / ${DATA.length}`;
+  const pct = score / DATA.length;
+  let v = '';
+  if (pct === 1) v = '🚀 Perfekcyjnie! Vibe coding nie ma przed Tobą tajemnic!';
+  else if (pct >= 0.8) v = '🎯 Świetny wynik! Masz solidne podstawy vibe codingu.';
+  else if (pct >= 0.6) v = '👍 Dobra robota! Warto powtórzyć kilka zagadnień.';
+  else if (pct >= 0.4) v = '💡 Niezły start - przejrzyj materiał z lekcji jeszcze raz.';
+  else v = '📖 Warto wrócić do lekcji i powtórzyć kluczowe pojęcia!';
+  document.getElementById('res-verdict').textContent = v;
+}
+
+function restart() {
+  current = 0; score = 0;
+  document.getElementById('results').classList.add('hidden');
+  renderQuestion();
+}
+
+init();
+</script>
+</body>
+</html>
