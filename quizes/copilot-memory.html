@@ -394,6 +394,25 @@
     .option { padding: 12px 14px; }
     .progress { margin: 0 -16px 28px; padding-inline: 16px; }
   }
+
+  /* ─── LANGUAGE SWITCHER ─── */
+  .lang-switch {
+    display: flex; justify-content: center; gap: 4px;
+    width: fit-content; margin: 0 auto 28px; padding: 4px;
+    border: 1px solid var(--border); border-radius: 100px; background: var(--surface);
+    animation: fadeUp 0.6s ease-out both;
+  }
+  .lang-btn {
+    font-family: var(--font-mono); font-size: 13px; font-weight: 600; letter-spacing: 1px;
+    min-width: 46px; padding: 6px 12px; border: none; border-radius: 100px;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+  .lang-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
+  .lang-btn.active { background: var(--accent); color: var(--bg); cursor: default; }
+  .lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* re-render after a language change: no entrance / feedback animations */
+  .question-card.no-anim, .question-card.no-anim .explanation.show { transition: none; animation: none; }
 </style>
 </head>
 <body>
@@ -403,13 +422,20 @@
 <div class="bg-glow bg-glow--purple"></div>
 
 <div class="container">
+  <div class="lang-switch" role="group" aria-label="Język / Language / Idioma / Sprache">
+    <button type="button" class="lang-btn" data-lang="pl" lang="pl" title="Polski" aria-label="Polski">PL</button>
+    <button type="button" class="lang-btn" data-lang="en" lang="en" title="English" aria-label="English">EN</button>
+    <button type="button" class="lang-btn" data-lang="es" lang="es" title="Español" aria-label="Español">ES</button>
+    <button type="button" class="lang-btn" data-lang="de" lang="de" title="Deutsch" aria-label="Deutsch">DE</button>
+  </div>
+
   <header class="header">
     <div class="header__badge">
       <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 14.5a6.5 6.5 0 110-13 6.5 6.5 0 010 13zM7 4h2v5H7V4zm0 6h2v2H7v-2z" fill="currentColor"/></svg>
-      QUIZ POWTÓRZENIOWY · C#
+      <span id="tBadge">QUIZ POWTÓRZENIOWY · C#</span>
     </div>
-    <h1 class="header__title">Copilot - pomocny programista AI</h1>
-    <p class="header__sub">12 pytań z lekcji o GitHub Copilot i grze Memory w C# (raylib)</p>
+    <h1 class="header__title" id="tTitle">Copilot - pomocny programista AI</h1>
+    <p class="header__sub" id="tSub">12 pytań z lekcji o GitHub Copilot i grze Memory w C# (raylib)</p>
   </header>
 
   <div class="progress">
@@ -424,11 +450,11 @@
   <div class="results" id="results">
     <div class="results__emoji" id="resultsEmoji"></div>
     <div class="results__score" id="resultsScore"></div>
-    <div class="results__label">poprawnych odpowiedzi</div>
+    <div class="results__label" id="tResultsLabel">poprawnych odpowiedzi</div>
     <div class="results__message" id="resultsMsg"></div>
     <button class="btn-restart" onclick="location.reload()">
       <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 019.3-3.95l-1.8.7a.5.5 0 00.18.96H14a.5.5 0 00.5-.5V1.38a.5.5 0 00-.96-.18l-.7 1.8A7 7 0 101 8a.75.75 0 011.5 0z" fill="currentColor"/></svg>
-      Zagraj ponownie
+      <span id="tRestart">Zagraj ponownie</span>
     </button>
   </div>
 </div>
@@ -436,164 +462,586 @@
 <script>
 "use strict";
 
-const QUESTIONS = [
-  {
-    q: "Czym jest GitHub Copilot?",
-    options: [
-      "Rozszerzeniem do VS Code, które podpowiada kod na podstawie kontekstu projektu",
-      "Osobną aplikacją desktopową do generowania całych programów",
-      "Chatbotem działającym w przeglądarce, podobnym do ChatGPT",
-      "Wtyczką do raylib, która automatycznie tworzy gry"
-    ],
-    correct: 0,
-    explanation: "Copilot to rozszerzenie do edytora kodu (np. VS Code), które czyta otwarty plik, rozumie kontekst i w czasie rzeczywistym proponuje kolejne linie kodu."
+// ─── texts for every language; answers and code samples are shared ───
+const I18N = {
+  "pl": {
+    "ui": {
+      "title": "Quiz - Copilot: pomocny programista AI (C#)",
+      "badge": "QUIZ POWTÓRZENIOWY · C#",
+      "h1": "Copilot - pomocny programista AI",
+      "sub": "12 pytań z lekcji o GitHub Copilot i grze Memory w C# (raylib)",
+      "qNum": "Pytanie {n} z {total}",
+      "resultsLabel": "poprawnych odpowiedzi",
+      "restart": "Zagraj ponownie",
+      "m100": "Perfekcyjny wynik! Copilot byłby dumny.",
+      "m80": "Świetna robota! Opanowałeś materiał z lekcji.",
+      "m60": "Dobry wynik! Warto powtórzyć kilka zagadnień.",
+      "m0": "Przejrzyj jeszcze raz konspekt i spróbuj ponownie!"
+    },
+    "questions": [
+      {
+        "q": "Czym jest GitHub Copilot?",
+        "options": [
+          "Rozszerzeniem do VS Code, które podpowiada kod na podstawie kontekstu projektu",
+          "Osobną aplikacją desktopową do generowania całych programów",
+          "Chatbotem działającym w przeglądarce, podobnym do ChatGPT",
+          "Wtyczką do raylib, która automatycznie tworzy gry"
+        ],
+        "explanation": "Copilot to rozszerzenie do edytora kodu (np. VS Code), które czyta otwarty plik, rozumie kontekst i w czasie rzeczywistym proponuje kolejne linie kodu."
+      },
+      {
+        "q": "Jak zaakceptować sugestię zaproponowaną przez Copilota w VS Code?",
+        "options": [
+          "Kliknąć prawym przyciskiem myszy i wybrać \"Accept\"",
+          "Nacisnąć Enter",
+          "Nacisnąć Ctrl+S",
+          "Nacisnąć Tab"
+        ],
+        "explanation": "Klawisz Tab akceptuje sugestię Copilota. Jeśli chcemy ją odrzucić, naciskamy Esc."
+      },
+      {
+        "q": "Dlaczego w metodzie <code>HandleClick</code> używamy pętli <code>for (int i = ...)</code>, a nie <code>foreach</code>?",
+        "options": [
+          "Bo potrzebujemy indeksu i, żeby zapisać go w liście selected",
+          "Bo foreach nie działa z listami typu List w C#",
+          "Bo pętla for jest zawsze szybsza od foreach",
+          "Bo tylko w pętli for można użyć instrukcji break"
+        ],
+        "explanation": "W liście selected przechowujemy indeksy kart, a nie same obiekty. Pętla for daje nam zmienną i, którą możemy dodać do selected. Pętla foreach nie udostępnia indeksu."
+      },
+      {
+        "q": "Jaki stan przyjmuje karta po zebraniu pasującej pary?",
+        "options": [
+          "\"collected\"",
+          "\"hidden\"",
+          "\"revealed\"",
+          "\"matched\""
+        ],
+        "explanation": "Stan \"matched\" oznacza, że karta została dopasowana do pary. Metoda DrawSingleCard pomija karty z tym stanem (return), więc znikają z planszy."
+      },
+      {
+        "q": "Co sprawdza funkcja <code>Raylib.CheckCollisionPointRec(pos, card.Rect)</code>?",
+        "options": [
+          "Czy punkt pos (pozycja kursora) znajduje się wewnątrz prostokąta karty",
+          "Czy karta koliduje z inną kartą na planszy",
+          "Czy prostokąt karty dotyka krawędzi okna",
+          "Czy animacja karty dobiegła końca"
+        ],
+        "explanation": "CheckCollisionPointRec sprawdza, czy podany punkt (Vector2) leży wewnątrz prostokąta Rectangle. Używamy jej do wykrycia, w którą kartę kliknął gracz."
+      },
+      {
+        "q": "Dlaczego w metodzie <code>HandleClick</code> na końcu znajduje się instrukcja <code>break</code>?",
+        "options": [
+          "Żeby pętla nie szukała kolejnych kart pasujących do tego samego kliknięcia",
+          "Żeby program nie zgłosił wyjątku IndexOutOfRangeException",
+          "Żeby animacja karty rozpoczęła się natychmiast",
+          "Jedno kliknięcie dotyczy dokładnie jednej karty, więc nie ma sensu kontynuować pętli"
+        ],
+        "explanation": "Gracz klika w jedno miejsce i odkrywa jedną kartę. Po znalezieniu tej karty dalsza iteracja po liście jest zbędna - break kończy pętlę."
+      },
+      {
+        "q": "Co stanie się, jeśli w metodzie <code>CheckPair</code> pominiemy wywołanie <code>selected.Clear()</code>?",
+        "options": [
+          "Lista selected będzie ciągle pełna i gracz nie będzie mógł klikać nowych kart",
+          "Gra się zawiesi na ekranie ładowania",
+          "Karty będą się odkrywać po trzy naraz",
+          "Program zgłosi wyjątek przy następnym kliknięciu"
+        ],
+        "explanation": "Główna pętla gry sprawdza warunek selected.Count < 2 przed wywołaniem HandleClick. Bez wyczyszczenia listy warunek nigdy nie będzie spełniony i gracz nie odkryje kolejnych kart."
+      },
+      {
+        "q": "Do czego służy czwarty argument (150) w wywołaniu <code>new Color(0, 0, 0, 150)</code> na ekranie wygranej?",
+        "options": [
+          "Ustawia jasność koloru w skali od 0 do 255",
+          "Określa numer warstwy, na której rysowany jest prostokąt",
+          "To rozmiar prostokąta w pikselach",
+          "To kanał alfa - ustawia półprzezroczystość, dzięki czemu nakładka przyciemnia ekran, ale go nie zakrywa całkowicie"
+        ],
+        "explanation": "Color w raylib przyjmuje cztery składowe: R, G, B i A (alfa). Wartość 150 z 255 daje czarną nakładkę z przezroczystością, przez którą prześwituje plansza."
+      },
+      {
+        "q": "Co zwraca wyrażenie <code>board.TrueForAll(c =&gt; c.State == \"matched\")</code>?",
+        "options": [
+          "true, gdy każda karta na planszy ma stan \"matched\"",
+          "Liczbę kart ze stanem \"matched\"",
+          "Listę kart, które mają stan \"matched\"",
+          "true, gdy przynajmniej jedna karta ma stan \"matched\""
+        ],
+        "explanation": "Metoda TrueForAll zwraca true tylko wtedy, gdy każdy element listy spełnia podany warunek. Używamy jej do wykrycia wygranej - wszystkie 16 kart musi być zebrane."
+      },
+      {
+        "q": "Dlaczego ważne jest krytyczne ocenianie sugestii Copilota zamiast ślepego akceptowania?",
+        "options": [
+          "Bo Copilot celowo generuje błędny kod, żeby testować programistów",
+          "Bo sugestie Copilota są zawsze w języku angielskim",
+          "Bo Copilot może podpowiadać tylko jedną linię na raz",
+          "Bo Copilot przewiduje kod na podstawie wzorców i nie zawsze rozumie nasz dokładny zamiar"
+        ],
+        "explanation": "Copilot to model statystyczny - proponuje kod, który wygląda prawdopodobnie w danym kontekście. Nie rozumie logiki gry, więc może zasugerować coś składniowo poprawnego, ale logicznie błędnego."
+      },
+      {
+        "q": "Co kontroluje pole <code>Anim</code> w klasie <code>Card</code>?",
+        "options": [
+          "Postęp animacji odwracania karty - maleje od 1.0 do 0.0, sterując efektem obrotu",
+          "Numer klatki animacji wyświetlanej na ekranie",
+          "Kąt obrotu karty w stopniach",
+          "Czas w sekundach od ostatniego kliknięcia"
+        ],
+        "explanation": "Pole Anim startuje od 1.0 i maleje do 0.0. W połowie (0.5) karta jest \"niewidoczna\" - wtedy podmienia się obrazek z rewersu na awers. To tworzy złudzenie obrotu."
+      },
+      {
+        "q": "Co się dzieje w metodzie <code>Update</code>, gdy <code>freezeTimer</code> odlicza do zera?",
+        "options": [
+          "Gra się resetuje do stanu początkowego",
+          "Wszystkie karty na planszy zostają zakryte",
+          "Ekran wygranej pojawia się automatycznie",
+          "Wywoływana jest metoda CheckPair, która sprawdza, czy dwie odkryte karty pasują do siebie"
+        ],
+        "explanation": "freezeTimer daje graczowi sekundę na zobaczenie obu odkrytych kart, zanim gra zdecyduje, czy to para. Po odliczeniu CheckPair porównuje wartości kart i zbiera parę lub zakrywa karty."
+      }
+    ]
   },
-  {
-    q: "Jak zaakceptować sugestię zaproponowaną przez Copilota w VS Code?",
-    options: [
-      "Kliknąć prawym przyciskiem myszy i wybrać \"Accept\"",
-      "Nacisnąć Enter",
-      "Nacisnąć Ctrl+S",
-      "Nacisnąć Tab"
-    ],
-    correct: 3,
-    explanation: "Klawisz Tab akceptuje sugestię Copilota. Jeśli chcemy ją odrzucić, naciskamy Esc."
+  "en": {
+    "ui": {
+      "title": "Quiz - Copilot: a helpful AI programmer (C#)",
+      "badge": "REVIEW QUIZ · C#",
+      "h1": "Copilot - a helpful AI programmer",
+      "sub": "12 questions from the lesson on GitHub Copilot and the Memory game in C# (raylib)",
+      "qNum": "Question {n} of {total}",
+      "resultsLabel": "correct answers",
+      "restart": "Play again",
+      "m100": "A perfect score! Copilot would be proud.",
+      "m80": "Great job! You have mastered the lesson material.",
+      "m60": "Good result! It's worth reviewing a few topics.",
+      "m0": "Go through the lesson notes again and try once more!"
+    },
+    "questions": [
+      {
+        "q": "What is GitHub Copilot?",
+        "options": [
+          "An extension for VS Code that suggests code based on the project context",
+          "A separate desktop app for generating entire programs",
+          "A chatbot that runs in the browser, similar to ChatGPT",
+          "A raylib plugin that creates games automatically"
+        ],
+        "explanation": "Copilot is an extension for a code editor (e.g. VS Code) that reads the open file, understands the context and suggests the next lines of code in real time."
+      },
+      {
+        "q": "How do you accept a suggestion proposed by Copilot in VS Code?",
+        "options": [
+          "Right-click and choose \"Accept\"",
+          "Press Enter",
+          "Press Ctrl+S",
+          "Press Tab"
+        ],
+        "explanation": "The Tab key accepts Copilot's suggestion. If we want to reject it, we press Esc."
+      },
+      {
+        "q": "Why do we use a <code>for (int i = ...)</code> loop in the <code>HandleClick</code> method instead of <code>foreach</code>?",
+        "options": [
+          "Because we need the index i to store it in the selected list",
+          "Because foreach doesn't work with List-type lists in C#",
+          "Because a for loop is always faster than foreach",
+          "Because break can only be used in a for loop"
+        ],
+        "explanation": "We store card indexes in the selected list, not the objects themselves. The for loop gives us the variable i, which we can add to selected. The foreach loop doesn't provide an index."
+      },
+      {
+        "q": "What state does a card get after a matching pair is collected?",
+        "options": [
+          "\"collected\"",
+          "\"hidden\"",
+          "\"revealed\"",
+          "\"matched\""
+        ],
+        "explanation": "The \"matched\" state means the card has been matched into a pair. The DrawSingleCard method skips cards in this state (return), so they disappear from the board."
+      },
+      {
+        "q": "What does the <code>Raylib.CheckCollisionPointRec(pos, card.Rect)</code> function check?",
+        "options": [
+          "Whether the point pos (the cursor position) is inside the card's rectangle",
+          "Whether the card collides with another card on the board",
+          "Whether the card's rectangle touches the edge of the window",
+          "Whether the card's animation has finished"
+        ],
+        "explanation": "CheckCollisionPointRec checks whether the given point (Vector2) lies inside the Rectangle. We use it to detect which card the player clicked."
+      },
+      {
+        "q": "Why is there a <code>break</code> statement at the end of the <code>HandleClick</code> method?",
+        "options": [
+          "So that the loop doesn't look for more cards matching the same click",
+          "So that the program doesn't throw an IndexOutOfRangeException",
+          "So that the card animation starts immediately",
+          "One click concerns exactly one card, so there is no point in continuing the loop"
+        ],
+        "explanation": "The player clicks in one place and reveals one card. Once that card is found, further iteration over the list is unnecessary - break ends the loop."
+      },
+      {
+        "q": "What happens if we leave out the <code>selected.Clear()</code> call in the <code>CheckPair</code> method?",
+        "options": [
+          "The selected list will stay full and the player won't be able to click new cards",
+          "The game will freeze on the loading screen",
+          "Cards will be revealed three at a time",
+          "The program will throw an exception on the next click"
+        ],
+        "explanation": "The main game loop checks the condition selected.Count < 2 before calling HandleClick. Without clearing the list, the condition will never be met and the player won't reveal any more cards."
+      },
+      {
+        "q": "What is the fourth argument (150) used for in the <code>new Color(0, 0, 0, 150)</code> call on the win screen?",
+        "options": [
+          "It sets the color's brightness on a scale from 0 to 255",
+          "It specifies the number of the layer the rectangle is drawn on",
+          "It is the size of the rectangle in pixels",
+          "It is the alpha channel - it sets semi-transparency, so the overlay darkens the screen but doesn't cover it completely"
+        ],
+        "explanation": "Color in raylib takes four components: R, G, B and A (alpha). The value 150 out of 255 gives a black overlay with transparency, through which the board shows."
+      },
+      {
+        "q": "What does the expression <code>board.TrueForAll(c =&gt; c.State == \"matched\")</code> return?",
+        "options": [
+          "true when every card on the board is in the \"matched\" state",
+          "The number of cards in the \"matched\" state",
+          "A list of the cards in the \"matched\" state",
+          "true when at least one card is in the \"matched\" state"
+        ],
+        "explanation": "The TrueForAll method returns true only when every element of the list meets the given condition. We use it to detect a win - all 16 cards have to be collected."
+      },
+      {
+        "q": "Why is it important to critically evaluate Copilot's suggestions instead of accepting them blindly?",
+        "options": [
+          "Because Copilot deliberately generates wrong code to test programmers",
+          "Because Copilot's suggestions are always in English",
+          "Because Copilot can only suggest one line at a time",
+          "Because Copilot predicts code based on patterns and doesn't always understand our exact intention"
+        ],
+        "explanation": "Copilot is a statistical model - it suggests code that looks likely in a given context. It doesn't understand the game's logic, so it may suggest something syntactically correct but logically wrong."
+      },
+      {
+        "q": "What does the <code>Anim</code> field control in the <code>Card</code> class?",
+        "options": [
+          "The progress of the card-flip animation - it decreases from 1.0 to 0.0, driving the rotation effect",
+          "The number of the animation frame shown on the screen",
+          "The card's rotation angle in degrees",
+          "The time in seconds since the last click"
+        ],
+        "explanation": "The Anim field starts at 1.0 and decreases to 0.0. Halfway (0.5) the card is \"invisible\" - that is when the image switches from the back to the front. This creates the illusion of a flip."
+      },
+      {
+        "q": "What happens in the <code>Update</code> method when <code>freezeTimer</code> counts down to zero?",
+        "options": [
+          "The game resets to its initial state",
+          "All cards on the board are covered",
+          "The win screen appears automatically",
+          "The CheckPair method is called, which checks whether the two revealed cards match"
+        ],
+        "explanation": "freezeTimer gives the player a second to see both revealed cards before the game decides whether they are a pair. After the countdown, CheckPair compares the card values and either collects the pair or covers the cards."
+      }
+    ]
   },
-  {
-    q: "Dlaczego w metodzie <code>HandleClick</code> używamy pętli <code>for (int i = ...)</code>, a nie <code>foreach</code>?",
-    options: [
-      "Bo potrzebujemy indeksu i, żeby zapisać go w liście selected",
-      "Bo foreach nie działa z listami typu List w C#",
-      "Bo pętla for jest zawsze szybsza od foreach",
-      "Bo tylko w pętli for można użyć instrukcji break"
-    ],
-    correct: 0,
-    explanation: "W liście selected przechowujemy indeksy kart, a nie same obiekty. Pętla for daje nam zmienną i, którą możemy dodać do selected. Pętla foreach nie udostępnia indeksu."
+  "es": {
+    "ui": {
+      "title": "Quiz - Copilot: un programador de IA que te ayuda (C#)",
+      "badge": "QUIZ DE REPASO · C#",
+      "h1": "Copilot - un programador de IA que te ayuda",
+      "sub": "12 preguntas de la lección sobre GitHub Copilot y el juego Memory en C# (raylib)",
+      "qNum": "Pregunta {n} de {total}",
+      "resultsLabel": "respuestas correctas",
+      "restart": "Jugar de nuevo",
+      "m100": "¡Puntuación perfecta! Copilot estaría orgulloso.",
+      "m80": "¡Buen trabajo! Dominas el material de la lección.",
+      "m60": "¡Buen resultado! Conviene repasar algunos temas.",
+      "m0": "¡Revisa de nuevo los apuntes de la lección e inténtalo otra vez!"
+    },
+    "questions": [
+      {
+        "q": "¿Qué es GitHub Copilot?",
+        "options": [
+          "Una extensión para VS Code que sugiere código basándose en el contexto del proyecto",
+          "Una aplicación de escritorio independiente para generar programas completos",
+          "Un chatbot que funciona en el navegador, parecido a ChatGPT",
+          "Un complemento de raylib que crea juegos automáticamente"
+        ],
+        "explanation": "Copilot es una extensión para el editor de código (p. ej. VS Code) que lee el archivo abierto, entiende el contexto y propone en tiempo real las siguientes líneas de código."
+      },
+      {
+        "q": "¿Cómo se acepta una sugerencia propuesta por Copilot en VS Code?",
+        "options": [
+          "Hacer clic con el botón derecho y elegir \"Accept\"",
+          "Pulsar Enter",
+          "Pulsar Ctrl+S",
+          "Pulsar Tab"
+        ],
+        "explanation": "La tecla Tab acepta la sugerencia de Copilot. Si queremos rechazarla, pulsamos Esc."
+      },
+      {
+        "q": "¿Por qué en el método <code>HandleClick</code> usamos un bucle <code>for (int i = ...)</code> y no <code>foreach</code>?",
+        "options": [
+          "Porque necesitamos el índice i para guardarlo en la lista selected",
+          "Porque foreach no funciona con listas de tipo List en C#",
+          "Porque el bucle for siempre es más rápido que foreach",
+          "Porque solo en el bucle for se puede usar la instrucción break"
+        ],
+        "explanation": "En la lista selected guardamos los índices de las cartas, no los propios objetos. El bucle for nos da la variable i, que podemos añadir a selected. El bucle foreach no proporciona el índice."
+      },
+      {
+        "q": "¿Qué estado toma una carta después de recoger una pareja coincidente?",
+        "options": [
+          "\"collected\"",
+          "\"hidden\"",
+          "\"revealed\"",
+          "\"matched\""
+        ],
+        "explanation": "El estado \"matched\" significa que la carta ha sido emparejada. El método DrawSingleCard omite las cartas con este estado (return), por lo que desaparecen del tablero."
+      },
+      {
+        "q": "¿Qué comprueba la función <code>Raylib.CheckCollisionPointRec(pos, card.Rect)</code>?",
+        "options": [
+          "Si el punto pos (la posición del cursor) está dentro del rectángulo de la carta",
+          "Si la carta choca con otra carta del tablero",
+          "Si el rectángulo de la carta toca el borde de la ventana",
+          "Si la animación de la carta ha terminado"
+        ],
+        "explanation": "CheckCollisionPointRec comprueba si el punto dado (Vector2) está dentro del rectángulo Rectangle. La usamos para detectar en qué carta ha hecho clic el jugador."
+      },
+      {
+        "q": "¿Por qué hay una instrucción <code>break</code> al final del método <code>HandleClick</code>?",
+        "options": [
+          "Para que el bucle no busque más cartas que coincidan con el mismo clic",
+          "Para que el programa no lance la excepción IndexOutOfRangeException",
+          "Para que la animación de la carta empiece inmediatamente",
+          "Un clic afecta exactamente a una carta, así que no tiene sentido continuar el bucle"
+        ],
+        "explanation": "El jugador hace clic en un lugar y descubre una carta. Una vez encontrada esa carta, seguir recorriendo la lista es innecesario - break termina el bucle."
+      },
+      {
+        "q": "¿Qué pasará si en el método <code>CheckPair</code> omitimos la llamada <code>selected.Clear()</code>?",
+        "options": [
+          "La lista selected estará siempre llena y el jugador no podrá hacer clic en nuevas cartas",
+          "El juego se quedará colgado en la pantalla de carga",
+          "Las cartas se descubrirán de tres en tres",
+          "El programa lanzará una excepción en el siguiente clic"
+        ],
+        "explanation": "El bucle principal del juego comprueba la condición selected.Count < 2 antes de llamar a HandleClick. Si no se vacía la lista, la condición nunca se cumplirá y el jugador no descubrirá más cartas."
+      },
+      {
+        "q": "¿Para qué sirve el cuarto argumento (150) en la llamada <code>new Color(0, 0, 0, 150)</code> en la pantalla de victoria?",
+        "options": [
+          "Establece el brillo del color en una escala de 0 a 255",
+          "Indica el número de la capa en la que se dibuja el rectángulo",
+          "Es el tamaño del rectángulo en píxeles",
+          "Es el canal alfa - establece la semitransparencia, de modo que la capa oscurece la pantalla, pero no la cubre por completo"
+        ],
+        "explanation": "Color en raylib recibe cuatro componentes: R, G, B y A (alfa). El valor 150 de 255 da una capa negra con transparencia a través de la cual se ve el tablero."
+      },
+      {
+        "q": "¿Qué devuelve la expresión <code>board.TrueForAll(c =&gt; c.State == \"matched\")</code>?",
+        "options": [
+          "true cuando todas las cartas del tablero tienen el estado \"matched\"",
+          "El número de cartas con el estado \"matched\"",
+          "Una lista de las cartas que tienen el estado \"matched\"",
+          "true cuando al menos una carta tiene el estado \"matched\""
+        ],
+        "explanation": "El método TrueForAll devuelve true solo cuando todos los elementos de la lista cumplen la condición dada. Lo usamos para detectar la victoria - hay que recoger las 16 cartas."
+      },
+      {
+        "q": "¿Por qué es importante evaluar críticamente las sugerencias de Copilot en lugar de aceptarlas a ciegas?",
+        "options": [
+          "Porque Copilot genera código erróneo a propósito para poner a prueba a los programadores",
+          "Porque las sugerencias de Copilot siempre están en inglés",
+          "Porque Copilot solo puede sugerir una línea cada vez",
+          "Porque Copilot predice el código a partir de patrones y no siempre entiende nuestra intención exacta"
+        ],
+        "explanation": "Copilot es un modelo estadístico - propone código que parece probable en un contexto dado. No entiende la lógica del juego, así que puede sugerir algo sintácticamente correcto pero lógicamente erróneo."
+      },
+      {
+        "q": "¿Qué controla el campo <code>Anim</code> en la clase <code>Card</code>?",
+        "options": [
+          "El progreso de la animación de giro de la carta - disminuye de 1.0 a 0.0 y controla el efecto de giro",
+          "El número del fotograma de la animación que se muestra en pantalla",
+          "El ángulo de giro de la carta en grados",
+          "El tiempo en segundos desde el último clic"
+        ],
+        "explanation": "El campo Anim empieza en 1.0 y disminuye hasta 0.0. A la mitad (0.5) la carta es \"invisible\" - en ese momento la imagen cambia del reverso al anverso. Esto crea la ilusión de giro."
+      },
+      {
+        "q": "¿Qué ocurre en el método <code>Update</code> cuando <code>freezeTimer</code> llega a cero?",
+        "options": [
+          "El juego se reinicia a su estado inicial",
+          "Todas las cartas del tablero se tapan",
+          "La pantalla de victoria aparece automáticamente",
+          "Se llama al método CheckPair, que comprueba si las dos cartas descubiertas coinciden"
+        ],
+        "explanation": "freezeTimer le da al jugador un segundo para ver las dos cartas descubiertas antes de que el juego decida si son pareja. Tras la cuenta atrás, CheckPair compara los valores de las cartas y recoge la pareja o tapa las cartas."
+      }
+    ]
   },
-  {
-    q: "Jaki stan przyjmuje karta po zebraniu pasującej pary?",
-    options: [
-      "\"collected\"",
-      "\"hidden\"",
-      "\"revealed\"",
-      "\"matched\""
-    ],
-    correct: 3,
-    explanation: "Stan \"matched\" oznacza, że karta została dopasowana do pary. Metoda DrawSingleCard pomija karty z tym stanem (return), więc znikają z planszy."
-  },
-  {
-    q: "Co sprawdza funkcja <code>Raylib.CheckCollisionPointRec(pos, card.Rect)</code>?",
-    options: [
-      "Czy punkt pos (pozycja kursora) znajduje się wewnątrz prostokąta karty",
-      "Czy karta koliduje z inną kartą na planszy",
-      "Czy prostokąt karty dotyka krawędzi okna",
-      "Czy animacja karty dobiegła końca"
-    ],
-    correct: 0,
-    explanation: "CheckCollisionPointRec sprawdza, czy podany punkt (Vector2) leży wewnątrz prostokąta Rectangle. Używamy jej do wykrycia, w którą kartę kliknął gracz."
-  },
-  {
-    q: "Dlaczego w metodzie <code>HandleClick</code> na końcu znajduje się instrukcja <code>break</code>?",
-    code: '<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; board.Count; i++)\n{\n    <span class="fn">Card</span> card = board[i];\n    <span class="kw">if</span> (Raylib.<span class="fn">CheckCollisionPointRec</span>(pos, card.Rect) &amp;&amp; card.State == <span class="str">"hidden"</span>)\n    {\n        card.State = <span class="str">"revealing"</span>;\n        selected.<span class="fn">Add</span>(i);\n        <span class="kw">break</span>;\n    }\n}',
-    options: [
-      "Żeby pętla nie szukała kolejnych kart pasujących do tego samego kliknięcia",
-      "Żeby program nie zgłosił wyjątku IndexOutOfRangeException",
-      "Żeby animacja karty rozpoczęła się natychmiast",
-      "Jedno kliknięcie dotyczy dokładnie jednej karty, więc nie ma sensu kontynuować pętli"
-    ],
-    correct: 3,
-    explanation: "Gracz klika w jedno miejsce i odkrywa jedną kartę. Po znalezieniu tej karty dalsza iteracja po liście jest zbędna - break kończy pętlę."
-  },
-  {
-    q: "Co stanie się, jeśli w metodzie <code>CheckPair</code> pominiemy wywołanie <code>selected.Clear()</code>?",
-    options: [
-      "Lista selected będzie ciągle pełna i gracz nie będzie mógł klikać nowych kart",
-      "Gra się zawiesi na ekranie ładowania",
-      "Karty będą się odkrywać po trzy naraz",
-      "Program zgłosi wyjątek przy następnym kliknięciu"
-    ],
-    correct: 0,
-    explanation: "Główna pętla gry sprawdza warunek selected.Count < 2 przed wywołaniem HandleClick. Bez wyczyszczenia listy warunek nigdy nie będzie spełniony i gracz nie odkryje kolejnych kart."
-  },
-  {
-    q: "Do czego służy czwarty argument (150) w wywołaniu <code>new Color(0, 0, 0, 150)</code> na ekranie wygranej?",
-    options: [
-      "Ustawia jasność koloru w skali od 0 do 255",
-      "Określa numer warstwy, na której rysowany jest prostokąt",
-      "To rozmiar prostokąta w pikselach",
-      "To kanał alfa - ustawia półprzezroczystość, dzięki czemu nakładka przyciemnia ekran, ale go nie zakrywa całkowicie"
-    ],
-    correct: 3,
-    explanation: "Color w raylib przyjmuje cztery składowe: R, G, B i A (alfa). Wartość 150 z 255 daje czarną nakładkę z przezroczystością, przez którą prześwituje plansza."
-  },
-  {
-    q: "Co zwraca wyrażenie <code>board.TrueForAll(c =&gt; c.State == \"matched\")</code>?",
-    options: [
-      "true, gdy każda karta na planszy ma stan \"matched\"",
-      "Liczbę kart ze stanem \"matched\"",
-      "Listę kart, które mają stan \"matched\"",
-      "true, gdy przynajmniej jedna karta ma stan \"matched\""
-    ],
-    correct: 0,
-    explanation: "Metoda TrueForAll zwraca true tylko wtedy, gdy każdy element listy spełnia podany warunek. Używamy jej do wykrycia wygranej - wszystkie 16 kart musi być zebrane."
-  },
-  {
-    q: "Dlaczego ważne jest krytyczne ocenianie sugestii Copilota zamiast ślepego akceptowania?",
-    options: [
-      "Bo Copilot celowo generuje błędny kod, żeby testować programistów",
-      "Bo sugestie Copilota są zawsze w języku angielskim",
-      "Bo Copilot może podpowiadać tylko jedną linię na raz",
-      "Bo Copilot przewiduje kod na podstawie wzorców i nie zawsze rozumie nasz dokładny zamiar"
-    ],
-    correct: 3,
-    explanation: "Copilot to model statystyczny - proponuje kod, który wygląda prawdopodobnie w danym kontekście. Nie rozumie logiki gry, więc może zasugerować coś składniowo poprawnego, ale logicznie błędnego."
-  },
-  {
-    q: "Co kontroluje pole <code>Anim</code> w klasie <code>Card</code>?",
-    code: '<span class="kw">static</span> <span class="kw">void</span> <span class="fn">AnimateCard</span>(<span class="fn">Card</span> card, <span class="kw">float</span> dt)\n{\n    <span class="kw">if</span> (card.State == <span class="str">"revealing"</span>)\n    {\n        card.Anim -= dt * <span class="num">5</span>;\n        <span class="kw">if</span> (card.Anim &lt;= <span class="num">0</span>)\n        {\n            card.Anim = <span class="num">0</span>;\n            card.State = <span class="str">"revealed"</span>;\n        }\n    }\n}',
-    options: [
-      "Postęp animacji odwracania karty - maleje od 1.0 do 0.0, sterując efektem obrotu",
-      "Numer klatki animacji wyświetlanej na ekranie",
-      "Kąt obrotu karty w stopniach",
-      "Czas w sekundach od ostatniego kliknięcia"
-    ],
-    correct: 0,
-    explanation: "Pole Anim startuje od 1.0 i maleje do 0.0. W połowie (0.5) karta jest \"niewidoczna\" - wtedy podmienia się obrazek z rewersu na awers. To tworzy złudzenie obrotu."
-  },
-  {
-    q: "Co się dzieje w metodzie <code>Update</code>, gdy <code>freezeTimer</code> odlicza do zera?",
-    code: '<span class="kw">if</span> (freezeTimer &gt; <span class="num">0</span>)\n{\n    freezeTimer -= dt;\n    <span class="kw">if</span> (freezeTimer &lt;= <span class="num">0</span>)\n        <span class="fn">CheckPair</span>();\n}',
-    options: [
-      "Gra się resetuje do stanu początkowego",
-      "Wszystkie karty na planszy zostają zakryte",
-      "Ekran wygranej pojawia się automatycznie",
-      "Wywoływana jest metoda CheckPair, która sprawdza, czy dwie odkryte karty pasują do siebie"
-    ],
-    correct: 3,
-    explanation: "freezeTimer daje graczowi sekundę na zobaczenie obu odkrytych kart, zanim gra zdecyduje, czy to para. Po odliczeniu CheckPair porównuje wartości kart i zbiera parę lub zakrywa karty."
+  "de": {
+    "ui": {
+      "title": "Quiz - Copilot: ein hilfreicher KI-Programmierer (C#)",
+      "badge": "WIEDERHOLUNGSQUIZ · C#",
+      "h1": "Copilot - ein hilfreicher KI-Programmierer",
+      "sub": "12 Fragen aus der Lektion über GitHub Copilot und das Memory-Spiel in C# (raylib)",
+      "qNum": "Frage {n} von {total}",
+      "resultsLabel": "richtige Antworten",
+      "restart": "Nochmal spielen",
+      "m100": "Perfektes Ergebnis! Copilot wäre stolz.",
+      "m80": "Tolle Arbeit! Du beherrschst den Stoff der Lektion.",
+      "m60": "Gutes Ergebnis! Es lohnt sich, ein paar Themen zu wiederholen.",
+      "m0": "Sieh dir die Lektionsunterlagen noch einmal an und versuche es erneut!"
+    },
+    "questions": [
+      {
+        "q": "Was ist GitHub Copilot?",
+        "options": [
+          "Eine Erweiterung für VS Code, die Code auf Grundlage des Projektkontexts vorschlägt",
+          "Eine eigenständige Desktop-App zum Erzeugen ganzer Programme",
+          "Ein Chatbot, der im Browser läuft, ähnlich wie ChatGPT",
+          "Ein raylib-Plugin, das automatisch Spiele erstellt"
+        ],
+        "explanation": "Copilot ist eine Erweiterung für einen Code-Editor (z. B. VS Code), die die geöffnete Datei liest, den Kontext versteht und in Echtzeit die nächsten Codezeilen vorschlägt."
+      },
+      {
+        "q": "Wie übernimmt man einen Vorschlag von Copilot in VS Code?",
+        "options": [
+          "Mit der rechten Maustaste klicken und \"Accept\" wählen",
+          "Enter drücken",
+          "Strg+S drücken",
+          "Tab drücken"
+        ],
+        "explanation": "Die Tab-Taste übernimmt den Vorschlag von Copilot. Wenn wir ihn ablehnen wollen, drücken wir Esc."
+      },
+      {
+        "q": "Warum verwenden wir in der Methode <code>HandleClick</code> eine <code>for (int i = ...)</code>-Schleife und nicht <code>foreach</code>?",
+        "options": [
+          "Weil wir den Index i brauchen, um ihn in der Liste selected zu speichern",
+          "Weil foreach in C# nicht mit Listen vom Typ List funktioniert",
+          "Weil eine for-Schleife immer schneller ist als foreach",
+          "Weil man break nur in einer for-Schleife verwenden kann"
+        ],
+        "explanation": "In der Liste selected speichern wir die Indizes der Karten, nicht die Objekte selbst. Die for-Schleife gibt uns die Variable i, die wir zu selected hinzufügen können. Die foreach-Schleife stellt keinen Index bereit."
+      },
+      {
+        "q": "Welchen Zustand bekommt eine Karte, nachdem ein passendes Paar eingesammelt wurde?",
+        "options": [
+          "\"collected\"",
+          "\"hidden\"",
+          "\"revealed\"",
+          "\"matched\""
+        ],
+        "explanation": "Der Zustand \"matched\" bedeutet, dass die Karte einem Paar zugeordnet wurde. Die Methode DrawSingleCard überspringt Karten mit diesem Zustand (return), daher verschwinden sie vom Spielfeld."
+      },
+      {
+        "q": "Was prüft die Funktion <code>Raylib.CheckCollisionPointRec(pos, card.Rect)</code>?",
+        "options": [
+          "Ob der Punkt pos (die Mausposition) innerhalb des Rechtecks der Karte liegt",
+          "Ob die Karte mit einer anderen Karte auf dem Spielfeld kollidiert",
+          "Ob das Rechteck der Karte den Fensterrand berührt",
+          "Ob die Animation der Karte beendet ist"
+        ],
+        "explanation": "CheckCollisionPointRec prüft, ob der angegebene Punkt (Vector2) innerhalb des Rectangle liegt. Wir verwenden sie, um zu erkennen, auf welche Karte der Spieler geklickt hat."
+      },
+      {
+        "q": "Warum steht am Ende der Methode <code>HandleClick</code> die Anweisung <code>break</code>?",
+        "options": [
+          "Damit die Schleife nicht nach weiteren Karten sucht, die zum selben Klick passen",
+          "Damit das Programm keine IndexOutOfRangeException auslöst",
+          "Damit die Animation der Karte sofort beginnt",
+          "Ein Klick betrifft genau eine Karte, daher ist es sinnlos, die Schleife fortzusetzen"
+        ],
+        "explanation": "Der Spieler klickt auf eine Stelle und deckt eine Karte auf. Sobald diese Karte gefunden ist, ist ein weiteres Durchlaufen der Liste überflüssig - break beendet die Schleife."
+      },
+      {
+        "q": "Was passiert, wenn wir in der Methode <code>CheckPair</code> den Aufruf <code>selected.Clear()</code> weglassen?",
+        "options": [
+          "Die Liste selected bleibt voll und der Spieler kann keine neuen Karten anklicken",
+          "Das Spiel hängt sich im Ladebildschirm auf",
+          "Die Karten werden immer zu dritt aufgedeckt",
+          "Das Programm löst beim nächsten Klick eine Ausnahme aus"
+        ],
+        "explanation": "Die Hauptschleife des Spiels prüft vor dem Aufruf von HandleClick die Bedingung selected.Count < 2. Ohne das Leeren der Liste ist die Bedingung nie erfüllt und der Spieler kann keine weiteren Karten aufdecken."
+      },
+      {
+        "q": "Wozu dient das vierte Argument (150) im Aufruf <code>new Color(0, 0, 0, 150)</code> auf dem Gewinnbildschirm?",
+        "options": [
+          "Es legt die Helligkeit der Farbe auf einer Skala von 0 bis 255 fest",
+          "Es gibt die Nummer der Ebene an, auf der das Rechteck gezeichnet wird",
+          "Es ist die Größe des Rechtecks in Pixeln",
+          "Es ist der Alphakanal - er legt die Halbtransparenz fest, sodass die Überlagerung den Bildschirm verdunkelt, aber nicht vollständig verdeckt"
+        ],
+        "explanation": "Color in raylib hat vier Komponenten: R, G, B und A (Alpha). Der Wert 150 von 255 ergibt eine schwarze, transparente Überlagerung, durch die das Spielfeld durchscheint."
+      },
+      {
+        "q": "Was gibt der Ausdruck <code>board.TrueForAll(c =&gt; c.State == \"matched\")</code> zurück?",
+        "options": [
+          "true, wenn jede Karte auf dem Spielfeld den Zustand \"matched\" hat",
+          "Die Anzahl der Karten mit dem Zustand \"matched\"",
+          "Eine Liste der Karten mit dem Zustand \"matched\"",
+          "true, wenn mindestens eine Karte den Zustand \"matched\" hat"
+        ],
+        "explanation": "Die Methode TrueForAll gibt nur dann true zurück, wenn jedes Element der Liste die angegebene Bedingung erfüllt. Wir verwenden sie, um einen Sieg zu erkennen - alle 16 Karten müssen eingesammelt sein."
+      },
+      {
+        "q": "Warum ist es wichtig, die Vorschläge von Copilot kritisch zu prüfen, statt sie blind zu übernehmen?",
+        "options": [
+          "Weil Copilot absichtlich fehlerhaften Code erzeugt, um Programmierer zu testen",
+          "Weil die Vorschläge von Copilot immer auf Englisch sind",
+          "Weil Copilot immer nur eine Zeile auf einmal vorschlagen kann",
+          "Weil Copilot Code anhand von Mustern vorhersagt und nicht immer unsere genaue Absicht versteht"
+        ],
+        "explanation": "Copilot ist ein statistisches Modell - es schlägt Code vor, der im jeweiligen Kontext wahrscheinlich aussieht. Es versteht die Spiellogik nicht und kann daher etwas syntaktisch Korrektes, aber logisch Falsches vorschlagen."
+      },
+      {
+        "q": "Was steuert das Feld <code>Anim</code> in der Klasse <code>Card</code>?",
+        "options": [
+          "Den Fortschritt der Umdreh-Animation der Karte - es sinkt von 1.0 auf 0.0 und steuert den Dreheffekt",
+          "Die Nummer des auf dem Bildschirm angezeigten Animationsbilds",
+          "Den Drehwinkel der Karte in Grad",
+          "Die Zeit in Sekunden seit dem letzten Klick"
+        ],
+        "explanation": "Das Feld Anim beginnt bei 1.0 und sinkt auf 0.0. In der Mitte (0.5) ist die Karte \"unsichtbar\" - dann wird das Bild von der Rückseite auf die Vorderseite gewechselt. So entsteht die Illusion einer Drehung."
+      },
+      {
+        "q": "Was passiert in der Methode <code>Update</code>, wenn <code>freezeTimer</code> auf null heruntergezählt hat?",
+        "options": [
+          "Das Spiel wird auf den Anfangszustand zurückgesetzt",
+          "Alle Karten auf dem Spielfeld werden zugedeckt",
+          "Der Gewinnbildschirm erscheint automatisch",
+          "Die Methode CheckPair wird aufgerufen, die prüft, ob die beiden aufgedeckten Karten zusammenpassen"
+        ],
+        "explanation": "freezeTimer gibt dem Spieler eine Sekunde, um beide aufgedeckten Karten zu sehen, bevor das Spiel entscheidet, ob es ein Paar ist. Nach dem Herunterzählen vergleicht CheckPair die Werte der Karten und sammelt das Paar ein oder deckt die Karten wieder zu."
+      }
+    ]
   }
-];
+};
+const CORRECT = [0, 3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3];
+const CODE = [null, null, null, null, null, "<span class=\"kw\">for</span> (<span class=\"kw\">int</span> i = <span class=\"num\">0</span>; i &lt; board.Count; i++)\n{\n    <span class=\"fn\">Card</span> card = board[i];\n    <span class=\"kw\">if</span> (Raylib.<span class=\"fn\">CheckCollisionPointRec</span>(pos, card.Rect) &amp;&amp; card.State == <span class=\"str\">\"hidden\"</span>)\n    {\n        card.State = <span class=\"str\">\"revealing\"</span>;\n        selected.<span class=\"fn\">Add</span>(i);\n        <span class=\"kw\">break</span>;\n    }\n}", null, null, null, null, "<span class=\"kw\">static</span> <span class=\"kw\">void</span> <span class=\"fn\">AnimateCard</span>(<span class=\"fn\">Card</span> card, <span class=\"kw\">float</span> dt)\n{\n    <span class=\"kw\">if</span> (card.State == <span class=\"str\">\"revealing\"</span>)\n    {\n        card.Anim -= dt * <span class=\"num\">5</span>;\n        <span class=\"kw\">if</span> (card.Anim &lt;= <span class=\"num\">0</span>)\n        {\n            card.Anim = <span class=\"num\">0</span>;\n            card.State = <span class=\"str\">\"revealed\"</span>;\n        }\n    }\n}", "<span class=\"kw\">if</span> (freezeTimer &gt; <span class=\"num\">0</span>)\n{\n    freezeTimer -= dt;\n    <span class=\"kw\">if</span> (freezeTimer &lt;= <span class=\"num\">0</span>)\n        <span class=\"fn\">CheckPair</span>();\n}"];
+const LANGS = ["pl", "en", "es", "de"];
+const TOTAL = CORRECT.length;
+let lang = "pl";
+const T = () => I18N[lang].ui;
+const QS = () => I18N[lang].questions;
+const fmt = (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v[k]);
 
 let answered = 0;
 let score = 0;
+const chosen = new Array(TOTAL).fill(null);   // option picked for each question
+let resultsShown = false;
 const container = document.getElementById("quizContainer");
 
-function renderQuiz() {
-  QUESTIONS.forEach((q, idx) => {
+function renderQuiz(animate) {
+  container.innerHTML = "";
+  QS().forEach((q, idx) => {
     const card = document.createElement("div");
     card.className = "question-card";
     card.id = `q${idx}`;
 
     const letters = ["A", "B", "C", "D"];
-    let codeBlock = "";
-    if (q.code) {
-      codeBlock = `<div class="question-card__code">${q.code}</div>`;
-    } else {
-      codeBlock = `<div class="question-card__spacer"></div>`;
-    }
+    const codeBlock = CODE[idx]
+      ? `<div class="question-card__code">${CODE[idx]}</div>`
+      : `<div class="question-card__spacer"></div>`;
 
     card.innerHTML = `
-      <div class="question-card__number">Pytanie ${idx + 1} z ${QUESTIONS.length}</div>
+      <div class="question-card__number">${fmt(T().qNum, { n: idx + 1, total: TOTAL })}</div>
       <div class="question-card__text">${q.q}</div>
       ${codeBlock}
       <div class="options">
@@ -607,72 +1055,111 @@ function renderQuiz() {
       <div class="explanation" id="expl${idx}">${q.explanation}</div>
     `;
 
+    if (!animate) card.classList.add("no-anim", "visible");
     container.appendChild(card);
-
-    setTimeout(() => card.classList.add("visible"), 80 * idx);
+    if (animate) setTimeout(() => card.classList.add("visible"), 80 * idx);
+    if (chosen[idx] !== null) markAnswer(idx, chosen[idx], false);
   });
 }
 
-function selectAnswer(el, qIdx, oIdx) {
+function markAnswer(qIdx, oIdx, withFx) {
   const card = document.getElementById(`q${qIdx}`);
   const options = card.querySelectorAll(".option");
-  const question = QUESTIONS[qIdx];
-
   options.forEach(o => o.classList.add("disabled"));
-
-  const isCorrect = oIdx === question.correct;
-
-  if (isCorrect) {
-    el.classList.add("selected-correct");
-    card.classList.add("correct", "pop");
-    score++;
+  if (oIdx === CORRECT[qIdx]) {
+    options[oIdx].classList.add("selected-correct");
+    card.classList.add("correct");
+    if (withFx) card.classList.add("pop");
   } else {
-    el.classList.add("selected-wrong");
-    card.classList.add("wrong", "shake");
-    options[question.correct].classList.add("reveal-correct");
+    options[oIdx].classList.add("selected-wrong");
+    card.classList.add("wrong");
+    if (withFx) card.classList.add("shake");
+    options[CORRECT[qIdx]].classList.add("reveal-correct");
   }
+  document.getElementById(`expl${qIdx}`).classList.add("show");
+}
 
-  const expl = document.getElementById(`expl${qIdx}`);
-  expl.classList.add("show");
+function selectAnswer(el, qIdx, oIdx) {
+  if (chosen[qIdx] !== null) return;
+  chosen[qIdx] = oIdx;
+  if (oIdx === CORRECT[qIdx]) score++;
+  markAnswer(qIdx, oIdx, true);
 
   answered++;
   updateProgress();
 
-  if (answered === QUESTIONS.length) {
+  if (answered === TOTAL) {
     setTimeout(showResults, 800);
   }
 }
 
 function updateProgress() {
-  const pct = (answered / QUESTIONS.length) * 100;
+  const pct = (answered / TOTAL) * 100;
   document.getElementById("progressFill").style.width = pct + "%";
-  document.getElementById("progressLabel").textContent = `${answered} / ${QUESTIONS.length}`;
+  document.getElementById("progressLabel").textContent = `${answered} / ${TOTAL}`;
+}
+
+function renderResults() {
+  const pct = Math.round((score / TOTAL) * 100);
+  const ui = T();
+  let emoji, msg;
+  if (pct === 100) { emoji = "🏆"; msg = ui.m100; }
+  else if (pct >= 80) { emoji = "🎉"; msg = ui.m80; }
+  else if (pct >= 60) { emoji = "💪"; msg = ui.m60; }
+  else { emoji = "📖"; msg = ui.m0; }
+  document.getElementById("resultsEmoji").textContent = emoji;
+  document.getElementById("resultsScore").textContent = `${score} / ${TOTAL}`;
+  document.getElementById("resultsMsg").textContent = msg;
 }
 
 function showResults() {
-  const pct = Math.round((score / QUESTIONS.length) * 100);
+  resultsShown = true;
+  renderResults();
   const res = document.getElementById("results");
-
-  let emoji, msg;
-  if (pct === 100) {
-    emoji = "🏆"; msg = "Perfekcyjny wynik! Copilot byłby dumny.";
-  } else if (pct >= 80) {
-    emoji = "🎉"; msg = "Świetna robota! Opanowałeś materiał z lekcji.";
-  } else if (pct >= 60) {
-    emoji = "💪"; msg = "Dobry wynik! Warto powtórzyć kilka zagadnień.";
-  } else {
-    emoji = "📖"; msg = "Przejrzyj jeszcze raz konspekt i spróbuj ponownie!";
-  }
-
-  document.getElementById("resultsEmoji").textContent = emoji;
-  document.getElementById("resultsScore").textContent = `${score} / ${QUESTIONS.length}`;
-  document.getElementById("resultsMsg").textContent = msg;
   res.classList.add("show");
-
   setTimeout(() => res.scrollIntoView({ behavior: "smooth", block: "center" }), 200);
 }
 
-renderQuiz();
+// ─── language switching: keeps answers, score and the results screen ───
+function setLang(l, persist = true, first = false) {
+  if (!LANGS.includes(l)) l = "pl";
+  // remember which question is at the top of the screen, so the page doesn't jump
+  let anchor = null, anchorTop = 0;
+  if (!first) {
+    for (const c of container.children) {
+      const r = c.getBoundingClientRect();
+      if (r.bottom > 0) { anchor = c.id; anchorTop = r.top; break; }
+    }
+  }
+  lang = l;
+  const ui = T();
+  document.documentElement.lang = l;
+  document.title = ui.title;
+  document.getElementById("tBadge").textContent = ui.badge;
+  document.getElementById("tTitle").textContent = ui.h1;
+  document.getElementById("tSub").textContent = ui.sub;
+  document.getElementById("tResultsLabel").textContent = ui.resultsLabel;
+  document.getElementById("tRestart").textContent = ui.restart;
+  document.querySelectorAll(".lang-btn").forEach(b => {
+    const on = b.dataset.lang === l;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  if (persist) { try { localStorage.setItem("quizLang", l); } catch (e) { /* storage unavailable */ } }
+
+  renderQuiz(first);
+  if (resultsShown) renderResults();
+  if (anchor) {
+    const el = document.getElementById(anchor);
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - anchorTop);
+  }
+}
+
+document.querySelectorAll(".lang-btn").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang)));
+
+let startLang = "pl";
+try { const saved = localStorage.getItem("quizLang"); if (LANGS.includes(saved)) startLang = saved; } catch (e) { /* storage unavailable */ }
+setLang(startLang, false, true);
 </script>
 
 </body>
